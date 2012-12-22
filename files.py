@@ -23,4 +23,4 @@ class FilePool(object):
     def close(self, filename):
         if filename in self.pool:
             self.pool[filename].close()
-        del self.pool[filename]
+            del self.pool[filename]
