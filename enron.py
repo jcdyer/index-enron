@@ -62,12 +62,6 @@ def get_indexpath_parts(indexpath):
         path_parts[-1] = path_parts[-1][:-4]
     return path_parts
   
-def pack_node(indexpath):
-    return 
-    # do something like:
-    # $ sort $indexpath| uniq|outfile.tmp; 
-    # $ cp outfile.tmp $indexpath
-
 def split_node(indexpath):
     index_files.close(indexpath)
     os.rename(indexpath, indexpath + '.old')
