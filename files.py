@@ -4,7 +4,10 @@ class FilePool(object):
     def __init__(self, limit):
         self.limit = limit
         self.pool = {}
-        self.size = 0
+
+    @property
+    def size(self):
+	return len(self.pool)
 
     def write(self, filename, content):
         if filename not in self.pool:

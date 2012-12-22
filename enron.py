@@ -5,28 +5,39 @@ import re
 import subprocess
 import sys
 
-DOCUMENT_PATH=os.path.join(os.environ['HOME'], 'Desktop', 'skilling-j')
+from files import FilePool
+
+DOCUMENT_PATH=os.path.join(os.environ['HOME'], 'enron/enron_mail_20110402/maildir')
 DATA_DIR = os.path.join(os.path.abspath(os.path.dirname(__file__)), 'data')
-MAX_NODE_SIZE = 2**16
+MAX_NODE_SIZE = 2**24
+FILE_POOL_SIZE = 800
 
 file_re = re.compile(r'^[0-9]+\.$')
 
+index_files = FilePool(FILE_POOL_SIZE)
+ 
 def match_files(files):
     for filename in files:
         if file_re.match(filename):
             yield filename
 
 def process_files(root):
+    i = 0
     if not os.path.exists(DATA_DIR):
         os.mkdir(DATA_DIR)
-    for dir, subdirs, files in os.walk(root):
-        for i, file in enumerate(match_files(files)):
-            sys.stdout.write('.')
-            if i % 500 == 0:
-                sys.stdout.write('%i' % i)
-            sys.stdout.flush()
-            filepath = os.path.join(dir, file)
-            index_email(filepath)
+    try:
+        for dir, subdirs, files in os.walk(root):
+            for file in match_files(files):
+                i += 1
+                sys.stdout.write('.')
+                if i % 500 == 0:
+                    sys.stdout.write('%i' % i)
+                sys.stdout.flush()
+                filepath = os.path.join(dir, file)
+                index_email(filepath)
+    finally:
+        index_files.clear_pool()
+   
             
 def find_node(word):
     wordpath = DATA_DIR
@@ -58,6 +69,7 @@ def pack_node(indexpath):
     # $ cp outfile.tmp $indexpath
 
 def split_node(indexpath):
+    index_files.close(indexpath)
     os.rename(indexpath, indexpath + '.old')
     parts = get_indexpath_parts(indexpath)
     newpath = os.path.join(DATA_DIR, *parts)
@@ -107,8 +119,7 @@ def insert_entry(word, filename):
         if indexstat.st_size > MAX_NODE_SIZE:
             split_node(indexpath)
             indexpath = find_node(word)
-    with open(indexpath, 'a') as index:
-        index.write('%s\t%s\n' % (word, filename))
+    index_files.write(indexpath, '%s\t%s\n' % (word, filename))
 
     
 def index_email(filename):
