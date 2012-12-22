@@ -9,8 +9,8 @@ from files import FilePool
 
 DOCUMENT_PATH=os.path.join(os.environ['HOME'], 'enron/enron_mail_20110402/maildir')
 DATA_DIR = os.path.join(os.path.abspath(os.path.dirname(__file__)), 'data')
-MAX_NODE_SIZE = 2**24
-FILE_POOL_SIZE = 800
+MAX_NODE_SIZE = 2**18
+FILE_POOL_SIZE = 128
 
 file_re = re.compile(r'^[0-9]+\.$')
 
@@ -109,10 +109,12 @@ def insert_entry(word, filename):
     else:
         # assuming this will pass because it did before, so 
         # the file exists.  This is not always a safe assumption.
-        indexstat = os.stat(indexpath)
-        if indexstat.st_size > MAX_NODE_SIZE:
-            split_node(indexpath)
-            indexpath = find_node(word)
+	# Don't try to split a file that has already been split.
+	if not os.path.exists(indexpath.rsplit('.', 1)[0]):
+            indexstat = os.stat(indexpath)
+            if indexstat.st_size > MAX_NODE_SIZE:
+                split_node(indexpath)
+                indexpath = find_node(word)
     index_files.write(indexpath, '%s\t%s\n' % (word, filename))
 
     
