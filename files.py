@@ -7,7 +7,7 @@ class FilePool(object):
 
     @property
     def size(self):
-	return len(self.pool)
+        return len(self.pool)
 
     def write(self, filename, content):
         if filename not in self.pool:
@@ -21,5 +21,6 @@ class FilePool(object):
             self.close(filename)
 
     def close(self, filename):
+        if filename in self.pool:
             self.pool[filename].close()
-            del self.pool[filename]
+        del self.pool[filename]
