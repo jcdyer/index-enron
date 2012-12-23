@@ -4,10 +4,11 @@ import os
 import re
 import subprocess
 import sys
+import sqlite3.dbapi2 as db
 
 from files import FilePool
 
-DOCUMENT_PATH=os.path.join(os.environ['HOME'], 'enron/enron_mail_20110402/maildir')
+DOCUMENT_DIR=os.path.join(os.environ['HOME'], 'proj/cue/enron/enron_mail_20110402/maildir/')
 DATA_DIR = os.path.join(os.path.abspath(os.path.dirname(__file__)), 'data')
 MAX_NODE_SIZE = 2**18
 FILE_POOL_SIZE = 128
@@ -15,30 +16,56 @@ FILE_POOL_SIZE = 128
 file_re = re.compile(r'^[0-9]+\.$')
 
 index_files = FilePool(FILE_POOL_SIZE)
- 
-def match_files(files):
-    for filename in files:
-        if file_re.match(filename):
-            yield filename
+
+if not os.path.exists(DATA_DIR):
+    os.mkdir(DATA_DIR)
+
+connection = db.connect(os.path.join(DATA_DIR, 'emails.db'))
+connection.execute('CREATE TABLE IF NOT EXISTS email (email text);')
+connection.commit()
+
+
+def match_files(root):
+    result = connection.execute('SELECT email from email')
+    seen_emails = set()
+    rows = result.fetchmany(1000)
+    while len(rows) != 0:
+        seen_emails.update((row[0] for row in rows))
+        rows = result.fetchmany(1000)
+        sys.stdout.write(':')
+    sys.stdout.flush()
+    for dir, subdirs, files in os.walk(root):
+        for filename in files:
+            filepath = os.path.join(dir, filename)
+            if not file_re.match(filename):
+                continue
+            if filepath in seen_emails:
+                continue
+            yield filepath
 
 def process_files(root):
     i = 0
-    if not os.path.exists(DATA_DIR):
-        os.mkdir(DATA_DIR)
     try:
-        for dir, subdirs, files in os.walk(root):
-            for file in match_files(files):
+        for filepath in match_files(root):
                 i += 1
                 sys.stdout.write('.')
                 if i % 500 == 0:
                     sys.stdout.write('%i' % i)
                 sys.stdout.flush()
-                filepath = os.path.join(dir, file)
                 index_email(filepath)
     finally:
+	sys.stdout.write('%i\n' % i)
         index_files.clear_pool()
+	connection.commit()
+	connection.close()
    
-            
+def get_document_id(filename):            
+    if filename.startswith(DOCUMENT_DIR):
+        return filename[len(DOCUMENT_DIR):]
+    else:
+        return filename
+
+
 def find_node(word):
     wordpath = DATA_DIR
     for letter in word:
@@ -109,8 +136,8 @@ def insert_entry(word, filename):
     else:
         # assuming this will pass because it did before, so 
         # the file exists.  This is not always a safe assumption.
-	# Don't try to split a file that has already been split.
-	if not os.path.exists(indexpath.rsplit('.', 1)[0]):
+        # Don't try to split a file that has already been split.
+        if not os.path.exists(indexpath.rsplit('.', 1)[0]):
             indexstat = os.stat(indexpath)
             if indexstat.st_size > MAX_NODE_SIZE:
                 split_node(indexpath)
@@ -119,13 +146,11 @@ def insert_entry(word, filename):
 
     
 def index_email(filename):
-    if filename.startswith(DOCUMENT_PATH):
-        document_id = filename[len(DOCUMENT_PATH):]
-    else:
-        document_id = filename
+    document_id = get_document_id(filename)
     with open(filename) as email:
         for word in get_words(email):
             insert_entry(word, document_id)
+    connection.execute('INSERT INTO email VALUES (?)', (filename,))
 
 def search(terms):
     seen_emails = set()
@@ -158,12 +183,3 @@ def get_search_results(search_file, term):
             word, email = read_entry(entry)
             if word.startswith(term):
                 yield email
-
-if __name__ == '__main__':
-    #process_files(os.path.join(DOCUMENT_PATH, 'inbox'))
-    while True:
-        terms = raw_input('enter search terms')
-        for result in search(terms.split()):
-            print result
-
-
