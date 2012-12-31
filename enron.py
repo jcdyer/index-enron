@@ -6,11 +6,11 @@ import subprocess
 import sys
 import sqlite3.dbapi2 as db
 
-from files import FilePool
+from files import FilePool, buffered_reader
 
-DOCUMENT_DIR=os.path.join(os.environ['HOME'], 'proj/cue/enron/enron_mail_20110402/maildir/')
+DOCUMENT_DIR=os.path.join(os.environ['HOME'], 'projects/cue/enron2/enron_mail_20110402/maildir/')
 DATA_DIR = os.path.join(os.path.abspath(os.path.dirname(__file__)), 'data')
-MAX_NODE_SIZE = 2**18
+MAX_NODE_SIZE = 2**20
 FILE_POOL_SIZE = 128
 
 file_re = re.compile(r'^[0-9]+\.$')
@@ -38,8 +38,10 @@ def match_files(root):
         for filename in files:
             filepath = os.path.join(dir, filename)
             if not file_re.match(filename):
+                # These are not emails.
                 continue
             if filepath in seen_emails:
+                # These emails have already been indexed
                 continue
             yield filepath
 
@@ -176,10 +178,9 @@ def search(terms):
                         if email not in seen_emails:
                             seen_emails.add(email)
                             yield email
-
+             
 def get_search_results(search_file, term):
-    with open(search_file) as index:
-        for entry in index:
-            word, email = read_entry(entry)
-            if word.startswith(term):
-                yield email
+    for entry in buffered_reader(search_file):
+        word, email = read_entry(entry)
+        if word.startswith(term):
+            yield email
