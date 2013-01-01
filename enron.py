@@ -6,7 +6,7 @@ import subprocess
 import sys
 import sqlite3.dbapi2 as db
 
-from files import FilePool, buffered_reader
+from files import FilePool
 
 DOCUMENT_DIR=os.path.join(os.environ['HOME'], 'projects/cue/enron2/enron_mail_20110402/maildir/')
 DATA_DIR = os.path.join(os.path.abspath(os.path.dirname(__file__)), 'data')
@@ -180,7 +180,8 @@ def search(terms):
                             yield email
              
 def get_search_results(search_file, term):
-    for entry in buffered_reader(search_file):
-        word, email = read_entry(entry)
-        if word.startswith(term):
-            yield email
+    with open(search_file) as index:
+        for entry in index:
+            word, email = read_entry(entry)
+            if word.startswith(term):
+                yield email
