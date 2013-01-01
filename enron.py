@@ -1,5 +1,6 @@
 #!/usr/bin/env/python
 
+from collections import defaultdict
 import os
 import re
 import subprocess
@@ -8,7 +9,7 @@ import sqlite3.dbapi2 as db
 
 from files import FilePool
 
-DOCUMENT_DIR=os.path.join(os.environ['HOME'], 'projects/cue/enron2/enron_mail_20110402/maildir/')
+DOCUMENT_DIR=os.path.join(os.environ['HOME'], 'projects/cue/enron/enron_mail_20110402/maildir/')
 DATA_DIR = os.path.join(os.path.abspath(os.path.dirname(__file__)), 'data')
 MAX_NODE_SIZE = 2**20
 FILE_POOL_SIZE = 128
@@ -46,21 +47,48 @@ def match_files(root):
             yield filepath
 
 def process_files(root):
-    i = 0
     try:
+        i = 0
+        emails_seen = set()
+        data = defaultdict(set)
         for filepath in match_files(root):
-                i += 1
+            email_data = index_email(filepath)
+            emails_seen.add(filepath)
+            data = merge_data(data, index_email(filepath))
+            i += 1
+            if i % 100 == 0:
                 sys.stdout.write('.')
-                if i % 500 == 0:
-                    sys.stdout.write('%i' % i)
                 sys.stdout.flush()
-                index_email(filepath)
+            if i % 5000 == 0:
+                write_index(data)
+                connection.executemany('INSERT INTO email VALUES (?)', [(val,) for val in emails_seen])
+                connection.commit()
+                emails_seen = set()
+                data = defaultdict(set)
+                sys.stdout.write('%i\n' % i)
+                sys.stdout.flush()
+        write_index(data)
+        connection.executemany('INSERT INTO email VALUES (?)', [(val,) for val in emails_seen])
     finally:
-	sys.stdout.write('%i\n' % i)
+	sys.stdout.write('\n%i\n' % i)
         index_files.clear_pool()
 	connection.commit()
 	connection.close()
    
+def write_index(data):
+    for word in sorted(data.keys()):
+        for filename in data[word]:
+            document_id = get_document_id(filename)
+            insert_entry(word, document_id)
+
+def merge_data(source1, source2):
+    for key in source2:
+        if key in source1:
+            source1[key].update(source2[key])
+        else:
+            source1[key] = source2[key]
+    return source1
+
 def get_document_id(filename):            
     if filename.startswith(DOCUMENT_DIR):
         return filename[len(DOCUMENT_DIR):]
@@ -148,11 +176,11 @@ def insert_entry(word, filename):
 
     
 def index_email(filename):
-    document_id = get_document_id(filename)
+    data = defaultdict(set)
     with open(filename) as email:
         for word in get_words(email):
-            insert_entry(word, document_id)
-    connection.execute('INSERT INTO email VALUES (?)', (filename,))
+            data[word].add(filename)
+    return data
 
 def search(terms):
     seen_emails = set()
